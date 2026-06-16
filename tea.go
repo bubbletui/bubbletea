@@ -591,6 +591,8 @@ func Interrupt() Msg {
 	return InterruptMsg{}
 }
 
+var ProgramOptions = []ProgramOption{}
+
 // NewProgram creates a new [Program].
 func NewProgram(model Model, opts ...ProgramOption) *Program {
 	p := &Program{
@@ -598,6 +600,10 @@ func NewProgram(model Model, opts ...ProgramOption) *Program {
 		msgs:         make(chan Msg),
 		errs:         make(chan error, 1),
 		rendererDone: make(chan struct{}),
+	}
+
+	if len(ProgramOptions) > 0 {
+		opts = append(opts, ProgramOptions...)
 	}
 
 	// Apply all options to the program.
