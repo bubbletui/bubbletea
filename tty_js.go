@@ -17,8 +17,7 @@ func init() {
 	}
 }
 
-// suspendSupported is false on js/wasm — there is no process suspension
-// in a browser environment.
+// suspendSupported is false on js/wasm — no process suspension in browser.
 const suspendSupported = false
 
 // suspendProcess is a no-op on js/wasm.
@@ -33,41 +32,51 @@ func (p *Program) initInput() error {
 	return nil
 }
 
-// initWanixInput reads initial terminal dimensions from WANIX_COLS/WANIX_ROWS
-// env vars (set by the wanix-term element), falling back to 80×24.
-// It also starts a goroutine that reads resize events from the winch
-// signal file and forwards them as WindowSizeMsg, replacing the native
-// SIGWINCH mechanism that doesn't exist in js/wasm.
+// initInput reads initial terminal dimensions from the winch signal file
+// (blocking until the first write), then continues reading resize events
+// in a goroutine. This replaces the native SIGWINCH mechanism that
+// doesn't exist in js/wasm.
 func (p *Program) initWanixInput() error {
-	if p.width == 0 {
-		if c := os.Getenv("WANIX_COLS"); c != "" {
-			p.width, _ = strconv.Atoi(c)
-		}
-	}
-	if p.height == 0 {
-		if r := os.Getenv("WANIX_ROWS"); r != "" {
-			p.height, _ = strconv.Atoi(r)
-		}
-	}
-	if p.width == 0 {
-		p.width = 80
-	}
-	if p.height == 0 {
-		p.height = 24
-	}
-
-	// start winch reader for terminal resize
 	winchPath := os.Getenv("TERM_WINCH")
 	if winchPath == "" {
+		if p.width == 0 {
+			p.width = 80
+		}
+		if p.height == 0 {
+			p.height = 24
+		}
 		return nil
 	}
-	go func() {
-		f, err := os.Open(winchPath)
-		if err != nil {
-			return
+
+	f, err := os.Open(winchPath)
+	if err != nil {
+		if p.width == 0 {
+			p.width = 80
 		}
+		if p.height == 0 {
+			p.height = 24
+		}
+		return nil
+	}
+
+	// first read blocks until the terminal has written its initial size
+	buf := make([]byte, 64)
+	n, err := f.Read(buf)
+	if err == nil {
+		parts := strings.Fields(string(buf[:n]))
+		if len(parts) >= 2 {
+			cols, _ := strconv.Atoi(parts[0])
+			rows, _ := strconv.Atoi(parts[1])
+			if cols > 0 && rows > 0 {
+				p.width = cols
+				p.height = rows
+			}
+		}
+	}
+
+	// continue reading for subsequent resize events
+	go func() {
 		defer f.Close()
-		buf := make([]byte, 64)
 		for {
 			n, err := f.Read(buf)
 			if err != nil {
@@ -80,10 +89,6 @@ func (p *Program) initWanixInput() error {
 				if cols > 0 && rows > 0 {
 					p.Send(WindowSizeMsg{Width: cols, Height: rows})
 				}
-			}
-			if len(parts) >= 4 {
-				os.Setenv("WANIX_XPIXEL", parts[2])
-				os.Setenv("WANIX_YPIXEL", parts[3])
 			}
 		}
 	}()
