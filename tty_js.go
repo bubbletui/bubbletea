@@ -10,10 +10,11 @@ import (
 
 func init() {
 	if os.Getenv("WANIX") != "" {
-		ProgramOptions = []ProgramOption{
+		ProgramOptions = append(
+			ProgramOptions,
 			WithInput(os.Stdin),
 			WithOutput(os.Stdout),
-		}
+		)
 	}
 }
 
