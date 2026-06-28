@@ -1017,7 +1017,8 @@ func (p *Program) Run() (returnModel Model, returnErr error) {
 		if !term.IsTerminal(os.Stdin.Fd()) {
 			ttyIn, _, err := OpenTTY()
 			if err != nil {
-				return p.initialModel, fmt.Errorf("bubbletea: error opening TTY: %w", err)
+				err = fmt.Errorf("bubbletea: error opening TTY: %w", err)
+				log.Fatalln(err)
 			}
 			p.input = ttyIn
 		}
