@@ -633,10 +633,20 @@ func (s *cursedRenderer) resize(w, h int) {
 // clearScreen implements renderer.
 func (s *cursedRenderer) clearScreen() {
 	s.mu.Lock()
-	// Move the cursor to the top left corner of the screen and trigger a full
-	// screen redraw.
-	s.scr.MoveTo(0, 0)
+	// Write the clear-screen sequence directly to the render buffer so the
+	// terminal always receives it, even if flush() later short-circuits due
+	// to an unchanged view. The sequence is the same one used by bash/readline
+	// for Ctrl+L: cursor home + erase entire display.
+	_, _ = s.scr.WriteString("\x1b[H\x1b[2J")
+	// Mark the screen for a full redraw via UV's clearUpdate path so the
+	// prompt and input are re-drawn at the top of the cleared screen.
+	// Do NOT call MoveTo(0,0) — that would set UV's internal cursor position
+	// without outputting the ANSI movement, causing clearUpdate's move() to
+	// short-circuit and erase from the wrong physical position.
 	s.scr.Erase()
+	// Reset lastView so flush() does not skip rendering when the model's
+	// view is unchanged (Ctrl+L on an empty input line).
+	s.lastView = nil
 	s.mu.Unlock()
 }
 
